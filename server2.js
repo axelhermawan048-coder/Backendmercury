@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
+
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -10,12 +11,37 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// 1. KONEKSI MONGODB ATLAS
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://axelhermawan048_db_user:yz2NXgwKHfdJGapG@cluster0.ebe9r6p.mongodb.net/myDatabase?retryWrites=true&w=majority"; 
+// 1. KONEKSI MONGODB ATLAS (DENGAN REUSE CONNECTION & BUFFER OPTION)
+const MONGO_URI = "mongodb+srv://axelhermawan048_db_user:yz2NXgwKHfdJGapG@cluster0.ebe9r6p.mongodb.net/myDatabase?retryWrites=true&w=majority"; 
 
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB Atlas Connected...'))
-  .catch(err => console.error('MongoDB Connection Error:', err));
+let isConnected = false;
+
+const connectDB = async () => {
+  if (isConnected && mongoose.connection.readyState === 1) {
+    return;
+  }
+  try {
+    const db = await mongoose.connect(MONGO_URI, {
+      serverSelectionTimeoutMS: 5000, // Timeout max 5 detik agar Vercel tidak gantung ke 10 detik
+      bufferCommands: false // Mencegah request gantung jika koneksi terputus
+    });
+    isConnected = db.connections[0].readyState === 1;
+    console.log('MongoDB Atlas Connected...');
+  } catch (err) {
+    console.error('MongoDB Connection Error:', err);
+    throw err;
+  }
+};
+
+// Middleware untuk memastikan database terhubung sebelum memproses endpoint
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal terhubung ke database MongoDB' });
+  }
+});
 
 // 2. SCHEMA & MODEL
 const userSchema = new mongoose.Schema({
@@ -42,8 +68,8 @@ const transactionSchema = new mongoose.Schema({
   bankDetails: String
 }, { timestamps: true });
 
-const User = mongoose.model('User', userSchema);
-const Transaction = mongoose.model('Transaction', transactionSchema);
+const User = mongoose.models.User || mongoose.model('User', userSchema);
+const Transaction = mongoose.models.Transaction || mongoose.model('Transaction', transactionSchema);
 
 // 3. API ENDPOINTS
 
@@ -253,5 +279,10 @@ app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Backend Server running on port ${PORT}`));
+// Export handler untuk Vercel / Express
+module.exports = app;
+
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`Backend Server running on port ${PORT}`));
+}
