@@ -22,8 +22,8 @@ const connectDB = async () => {
   }
   try {
     const db = await mongoose.connect(MONGO_URI, {
-      serverSelectionTimeoutMS: 5000, // Timeout max 5 detik agar Vercel tidak gantung ke 10 detik
-      bufferCommands: false // Mencegah request gantung jika koneksi terputus
+      serverSelectionTimeoutMS: 5000,
+      bufferCommands: false
     });
     isConnected = db.connections[0].readyState === 1;
     console.log('MongoDB Atlas Connected...');
@@ -111,9 +111,12 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// GET USER (Dukungan pencarian berdasarkan userId maupun MongoDB _id)
 app.get('/api/users/:userId', async (req, res) => {
   try {
-    const user = await User.findOne({ userId: req.params.userId }).select('-password');
+    const param = req.params.userId;
+    const query = param.startsWith('#USR-') ? { userId: param } : { _id: param };
+    const user = await User.findOne(query).select('-password');
     if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
     res.json(user);
   } catch (err) {
@@ -125,8 +128,11 @@ app.get('/api/users/:userId', async (req, res) => {
 app.put('/api/users/:userId/bank', async (req, res) => {
   try {
     const { bankName, accNumber, holderName } = req.body;
+    const param = req.params.userId;
+    const query = param.startsWith('#USR-') ? { userId: param } : { _id: param };
+
     const user = await User.findOneAndUpdate(
-      { userId: req.params.userId },
+      query,
       { bankInfo: { bankName, accNumber, holderName } },
       { new: true }
     ).select('-password');
@@ -139,8 +145,11 @@ app.put('/api/users/:userId/bank', async (req, res) => {
 // Update Status KYC User
 app.put('/api/users/:userId/kyc', async (req, res) => {
   try {
+    const param = req.params.userId;
+    const query = param.startsWith('#USR-') ? { userId: param } : { _id: param };
+
     const user = await User.findOneAndUpdate(
-      { userId: req.params.userId },
+      query,
       { kycStatus: 'Menunggu Verifikasi' },
       { new: true }
     ).select('-password');
@@ -160,7 +169,8 @@ app.post('/api/transactions', async (req, res) => {
     }
 
     if (type === 'Withdraw') {
-      const user = await User.findOne({ userId });
+      const query = userId.startsWith('#USR-') ? { userId } : { _id: userId };
+      const user = await User.findOne(query);
       if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
       if (user.balance < amount) {
         return res.status(400).json({ message: 'Saldo tidak mencukupi untuk penarikan' });
@@ -203,8 +213,11 @@ app.put('/api/admin/users/:userId/balance', async (req, res) => {
     const { balance } = req.body;
     if (balance < 0) return res.status(400).json({ message: 'Saldo tidak boleh negatif' });
 
+    const param = req.params.userId;
+    const query = param.startsWith('#USR-') ? { userId: param } : { _id: param };
+
     const user = await User.findOneAndUpdate(
-      { userId: req.params.userId },
+      query,
       { balance },
       { new: true }
     ).select('-password');
@@ -223,7 +236,7 @@ app.get('/api/admin/transactions', async (req, res) => {
   }
 });
 
-// Update Status Transaksi Admin (Safe Database Transaction)
+// Update Status Transaksi Admin
 app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -245,7 +258,8 @@ app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
     }
 
     if (status === 'Berhasil') {
-      const user = await User.findOne({ userId: trx.userId }).session(session);
+      const userQuery = trx.userId.startsWith('#USR-') ? { userId: trx.userId } : { _id: trx.userId };
+      const user = await User.findOne(userQuery).session(session);
       if (!user) {
         await session.abortTransaction();
         session.endSession();
@@ -279,7 +293,6 @@ app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
   }
 });
 
-// Export handler untuk Vercel / Express
 module.exports = app;
 
 if (process.env.NODE_ENV !== 'production') {
