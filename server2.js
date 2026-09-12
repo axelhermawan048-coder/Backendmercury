@@ -11,7 +11,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// 1. KONEKSI MONGODB ATLAS (DENGAN REUSE CONNECTION & BUFFER OPTION)
+// 1. KONEKSI MONGODB ATLAS
 const MONGO_URI = "mongodb+srv://axelhermawan048_db_user:yz2NXgwKHfdJGapG@cluster0.ebe9r6p.mongodb.net/myDatabase?retryWrites=true&w=majority"; 
 
 let isConnected = false;
@@ -33,7 +33,6 @@ const connectDB = async () => {
   }
 };
 
-// Middleware untuk memastikan database terhubung sebelum memproses endpoint
 app.use(async (req, res, next) => {
   try {
     await connectDB();
@@ -111,13 +110,23 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// GET USER (Dukungan pencarian berdasarkan userId maupun MongoDB _id)
+// GET USER (Dukungan validasi ObjectId & userId)
 app.get('/api/users/:userId', async (req, res) => {
   try {
     const param = req.params.userId;
-    const query = param.startsWith('#USR-') ? { userId: param } : { _id: param };
+    
+    let query;
+    if (param.startsWith('#USR-')) {
+      query = { userId: param };
+    } else if (mongoose.Types.ObjectId.isValid(param)) {
+      query = { _id: param };
+    } else {
+      return res.status(400).json({ message: 'Format ID tidak valid' });
+    }
+
     const user = await User.findOne(query).select('-password');
     if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+    
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -129,7 +138,9 @@ app.put('/api/users/:userId/bank', async (req, res) => {
   try {
     const { bankName, accNumber, holderName } = req.body;
     const param = req.params.userId;
-    const query = param.startsWith('#USR-') ? { userId: param } : { _id: param };
+    const query = param.startsWith('#USR-') ? { userId: param } : mongoose.Types.ObjectId.isValid(param) ? { _id: param } : null;
+
+    if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
 
     const user = await User.findOneAndUpdate(
       query,
@@ -146,7 +157,9 @@ app.put('/api/users/:userId/bank', async (req, res) => {
 app.put('/api/users/:userId/kyc', async (req, res) => {
   try {
     const param = req.params.userId;
-    const query = param.startsWith('#USR-') ? { userId: param } : { _id: param };
+    const query = param.startsWith('#USR-') ? { userId: param } : mongoose.Types.ObjectId.isValid(param) ? { _id: param } : null;
+
+    if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
 
     const user = await User.findOneAndUpdate(
       query,
@@ -169,7 +182,9 @@ app.post('/api/transactions', async (req, res) => {
     }
 
     if (type === 'Withdraw') {
-      const query = userId.startsWith('#USR-') ? { userId } : { _id: userId };
+      const query = userId.startsWith('#USR-') ? { userId } : mongoose.Types.ObjectId.isValid(userId) ? { _id: userId } : null;
+      if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
+
       const user = await User.findOne(query);
       if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
       if (user.balance < amount) {
@@ -214,7 +229,9 @@ app.put('/api/admin/users/:userId/balance', async (req, res) => {
     if (balance < 0) return res.status(400).json({ message: 'Saldo tidak boleh negatif' });
 
     const param = req.params.userId;
-    const query = param.startsWith('#USR-') ? { userId: param } : { _id: param };
+    const query = param.startsWith('#USR-') ? { userId: param } : mongoose.Types.ObjectId.isValid(param) ? { _id: param } : null;
+
+    if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
 
     const user = await User.findOneAndUpdate(
       query,
@@ -236,7 +253,6 @@ app.get('/api/admin/transactions', async (req, res) => {
   }
 });
 
-// Update Status Transaksi Admin
 app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -258,7 +274,7 @@ app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
     }
 
     if (status === 'Berhasil') {
-      const userQuery = trx.userId.startsWith('#USR-') ? { userId: trx.userId } : { _id: trx.userId };
+      const userQuery = trx.userId.startsWith('#USR-') ? { userId: trx.userId } : mongoose.Types.ObjectId.isValid(trx.userId) ? { _id: trx.userId } : null;
       const user = await User.findOne(userQuery).session(session);
       if (!user) {
         await session.abortTransaction();
