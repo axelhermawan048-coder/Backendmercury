@@ -1,15 +1,26 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "server2.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "server2.js"
-    }
-  ]
-}
+    "version": 2,
+    "builds": [
+      {
+        "src": "server2.js",
+        "use": "@vercel/node"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/(.*)",
+        "dest": "server2.js"
+      }
+    ],
+    "headers": [
+      {
+        "source": "/(.*)",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow"
+          }
+        ]
+      }
+    ]
+  }
