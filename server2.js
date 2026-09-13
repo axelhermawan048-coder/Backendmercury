@@ -110,7 +110,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// GET USER (Dukungan validasi ObjectId & userId)
+// GET USER
 app.get('/api/users/:userId', async (req, res) => {
   try {
     const param = req.params.userId;
