@@ -113,7 +113,7 @@ app.post('/api/auth/login', async (req, res) => {
 // GET USER
 app.get('/api/users/:userId', async (req, res) => {
   try {
-    const param = req.params.userId;
+    const param = decodeURIComponent(req.params.userId);
     
     let query;
     if (param.startsWith('#USR-')) {
@@ -137,7 +137,7 @@ app.get('/api/users/:userId', async (req, res) => {
 app.put('/api/users/:userId/bank', async (req, res) => {
   try {
     const { bankName, accNumber, holderName } = req.body;
-    const param = req.params.userId;
+    const param = decodeURIComponent(req.params.userId);
     const query = param.startsWith('#USR-') ? { userId: param } : mongoose.Types.ObjectId.isValid(param) ? { _id: param } : null;
 
     if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
@@ -156,7 +156,7 @@ app.put('/api/users/:userId/bank', async (req, res) => {
 // Update Status KYC User
 app.put('/api/users/:userId/kyc', async (req, res) => {
   try {
-    const param = req.params.userId;
+    const param = decodeURIComponent(req.params.userId);
     const query = param.startsWith('#USR-') ? { userId: param } : mongoose.Types.ObjectId.isValid(param) ? { _id: param } : null;
 
     if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
@@ -206,7 +206,8 @@ app.post('/api/transactions', async (req, res) => {
 
 app.get('/api/transactions/user/:userId', async (req, res) => {
   try {
-    const history = await Transaction.find({ userId: req.params.userId }).sort({ createdAt: -1 });
+    const userId = decodeURIComponent(req.params.userId);
+    const history = await Transaction.find({ userId }).sort({ createdAt: -1 });
     res.json(history);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -228,7 +229,7 @@ app.put('/api/admin/users/:userId/balance', async (req, res) => {
     const { balance } = req.body;
     if (balance < 0) return res.status(400).json({ message: 'Saldo tidak boleh negatif' });
 
-    const param = req.params.userId;
+    const param = decodeURIComponent(req.params.userId);
     const query = param.startsWith('#USR-') ? { userId: param } : mongoose.Types.ObjectId.isValid(param) ? { _id: param } : null;
 
     if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
@@ -239,6 +240,35 @@ app.put('/api/admin/users/:userId/balance', async (req, res) => {
       { new: true }
     ).select('-password');
     res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// [BARU] Endpoint Admin untuk Reset Password User
+app.put('/api/admin/users/:userId/password', async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.trim() === '') {
+      return res.status(400).json({ message: 'Kata sandi baru tidak boleh kosong' });
+    }
+
+    const param = decodeURIComponent(req.params.userId);
+    const query = param.startsWith('#USR-') ? { userId: param } : mongoose.Types.ObjectId.isValid(param) ? { _id: param } : null;
+
+    if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
+
+    const user = await User.findOneAndUpdate(
+      query,
+      { password },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User tidak ditemukan' });
+    }
+
+    res.json({ message: 'Kata sandi berhasil direset', user });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -259,7 +289,8 @@ app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
 
   try {
     const { status } = req.body;
-    const trx = await Transaction.findOne({ trxId: req.params.trxId }).session(session);
+    const trxId = decodeURIComponent(req.params.trxId);
+    const trx = await Transaction.findOne({ trxId }).session(session);
     
     if (!trx) {
       await session.abortTransaction();
