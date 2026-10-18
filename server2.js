@@ -153,7 +153,7 @@ app.put('/api/users/:userId/bank', async (req, res) => {
   }
 });
 
-// Update Status KYC User
+// Update Status KYC User (Pengajuan dari User)
 app.put('/api/users/:userId/kyc', async (req, res) => {
   try {
     const param = decodeURIComponent(req.params.userId);
@@ -245,7 +245,7 @@ app.put('/api/admin/users/:userId/balance', async (req, res) => {
   }
 });
 
-// [BARU] Endpoint Admin untuk Reset Password User
+// Endpoint Admin untuk Reset Password User
 app.put('/api/admin/users/:userId/password', async (req, res) => {
   try {
     const { password } = req.body;
@@ -269,6 +269,35 @@ app.put('/api/admin/users/:userId/password', async (req, res) => {
     }
 
     res.json({ message: 'Kata sandi berhasil direset', user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// [BARU] Endpoint Admin untuk Mengubah Status KYC / Verifikasi User
+app.put('/api/admin/users/:userId/kyc', async (req, res) => {
+  try {
+    const { kycStatus } = req.body;
+    if (!kycStatus) {
+      return res.status(400).json({ message: 'Status KYC/Verifikasi harus diisi' });
+    }
+
+    const param = decodeURIComponent(req.params.userId);
+    const query = param.startsWith('#USR-') ? { userId: param } : mongoose.Types.ObjectId.isValid(param) ? { _id: param } : null;
+
+    if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
+
+    const user = await User.findOneAndUpdate(
+      query,
+      { kycStatus },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User tidak ditemukan' });
+    }
+
+    res.json({ message: 'Status KYC/Verifikasi berhasil diperbarui', user });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
