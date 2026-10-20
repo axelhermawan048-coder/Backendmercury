@@ -274,7 +274,7 @@ app.put('/api/admin/users/:userId/password', async (req, res) => {
   }
 });
 
-// [BARU] Endpoint Admin untuk Mengubah Status KYC / Verifikasi User
+// Endpoint Admin untuk Mengubah Status KYC / Verifikasi User
 app.put('/api/admin/users/:userId/kyc', async (req, res) => {
   try {
     const { kycStatus } = req.body;
@@ -317,7 +317,7 @@ app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
   session.startTransaction();
 
   try {
-    const { status } = req.body;
+    const { status, revertBalance } = req.body;
     const trxId = decodeURIComponent(req.params.trxId);
     const trx = await Transaction.findOne({ trxId }).session(session);
     
@@ -327,6 +327,30 @@ app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
       return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
     }
 
+    // --- KONDISI REVERT: Jika mengubah Withdraw Berhasil menjadi Pending ---
+    if (trx.type === 'Withdraw' && trx.status === 'Berhasil' && status === 'Pending' && revertBalance) {
+      const userQuery = trx.userId.startsWith('#USR-') ? { userId: trx.userId } : mongoose.Types.ObjectId.isValid(trx.userId) ? { _id: trx.userId } : null;
+      const user = await User.findOne(userQuery).session(session);
+      
+      if (!user) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ message: 'User transaksi tidak ditemukan' });
+      }
+
+      // Kembalikan saldo pengguna (tambahkan semula jumlah penarikan yang sebelumnya ditolak/dipotong)
+      user.balance += trx.amount;
+      await user.save({ session });
+
+      trx.status = 'Pending';
+      await trx.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
+      return res.json(trx);
+    }
+
+    // Validasi standard jika sudah Berhasil atau Ditolak
     if (trx.status === 'Berhasil' || trx.status === 'Ditolak') {
       await session.abortTransaction();
       session.endSession();
