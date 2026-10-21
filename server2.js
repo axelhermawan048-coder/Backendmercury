@@ -133,7 +133,7 @@ app.get('/api/users/:userId', async (req, res) => {
   }
 });
 
-// Update Rekening Bank User
+// Update Rekening Bank User (Oleh User)
 app.put('/api/users/:userId/bank', async (req, res) => {
   try {
     const { bankName, accNumber, holderName } = req.body;
@@ -219,6 +219,31 @@ app.get('/api/admin/users', async (req, res) => {
   try {
     const users = await User.find().select('-password').sort({ createdAt: -1 });
     res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint Admin untuk Update Bank Info User
+app.put('/api/admin/users/:userId/bank', async (req, res) => {
+  try {
+    const { bankName, accNumber, holderName } = req.body;
+    const param = decodeURIComponent(req.params.userId);
+    const query = param.startsWith('#USR-') ? { userId: param } : mongoose.Types.ObjectId.isValid(param) ? { _id: param } : null;
+
+    if (!query) return res.status(400).json({ message: 'Format ID tidak valid' });
+
+    const user = await User.findOneAndUpdate(
+      query,
+      { bankInfo: { bankName: bankName || '', accNumber: accNumber || '', holderName: holderName || '' } },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User tidak ditemukan' });
+    }
+
+    res.json({ message: 'Data rekening bank pengguna berhasil diperbarui', user });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -338,7 +363,7 @@ app.put('/api/admin/transactions/:trxId/status', async (req, res) => {
         return res.status(404).json({ message: 'User transaksi tidak ditemukan' });
       }
 
-      // Kembalikan saldo pengguna (tambahkan semula jumlah penarikan yang sebelumnya ditolak/dipotong)
+      // Kembalikan saldo pengguna
       user.balance += trx.amount;
       await user.save({ session });
 
